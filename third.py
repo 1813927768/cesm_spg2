@@ -25,14 +25,12 @@ output_date = '0052-11-02-00000'
 base_dir = ['/BIGDATA1/iocas_mmu_3/cesm/1.2.2/ice/14/parallel/' + str(i) + '/mycase' for i in range(numprocs)]
 run_dir = [route + '/run/' for route in base_dir]
 fin_dir = [route + '/finished' for route in base_dir]
-# base_dir = '/BIGDATA1/iocas_mmu_3/cesm/1.2.2/ice/14/parallel/' + str(rank) + '/mycase/'
-# run_dir = '/BIGDATA1/iocas_mmu_3/cesm/1.2.2/ice/14/parallel/' + str(rank) + '/mycase/run/'
-# fin_dir = '/BIGDATA1/iocas_mmu_3/cesm/1.2.2/ice/14/parallel/' + str(rank) + '/mycase/finished'
+
 file_name = '/BIGDATA1/iocas_mmu_3/cesm/1.2.2/ice/14/parallel/result_min_1110.txt'
-process_file = '/BIGDATA1/iocas_mmu_3/cesm/1.2.2/ice/14/parallel/plot.txt'
+process_file = '/BIGDATA1/iocas_mmu_3/cesm/1.2.2/ice/14/parallel/process.txt'
 restart_file = '/BIGDATA1/iocas_mmu_3/cesm/1.2.2/ice/14/parallel/restart.txt'
 duration = 15
-basic = 1.58523
+basic = 1.58523     # 不加扰动模式输出
 init_value = 1e10
 error_value = 10
 
@@ -54,7 +52,6 @@ cur_file.close()
 
 
 #SPG2全局变量设置
-normp = 3 #暂不考虑约束问题
 M = 10    #lineSearch考虑的之前的特征方程值个数
 RMAX = 1e30
 RMIN = 1e-30
@@ -135,7 +132,7 @@ class SPG2():
     # 保存iter信息
     def write_to_rfile(self):
         with open(file_name, 'a') as f:
-            f.write('\n'+"iter = "+ str(self.itern)+'\n')
+            f.write('\n'+"### iter = "+ str(self.itern)+'\n')
             f.write("fvalue = "+ str(self.fvalue)+'\n')
             f.write("fvalues = "+ str(self.fvalues)+'\n')
             f.write("x = "+ str(self.x)+'\n')
@@ -145,30 +142,6 @@ class SPG2():
             f.write("fbest = "+ str(self.fbest)+'\n')
             f.write("xbest = "+ str(self.xbest)+'\n')
             f.write("rambda = "+ str(self.rambda)+'\n')
-
-    # normp = 1:  box  constraints
-    # normp = 2:  ball constraints
-    # delta > 0:  parameter in the constraint
-    # 将扰动x投影到特征空间
-    def project(self,x):
-        delta = deltm = 0.0
-        # box constraint
-        if(normp == 1):
-            x = [min(delta,max(i,deltm)) for i in x]
-        # ball constraint
-        elif(normp == 2):
-            sum = 0
-            for i in x:
-                sum += i*i
-            sqrtsum = math.sqrt(sum)
-            if(sqrtsum <= delta):
-                self.write_to_pfile('proj done')
-                return x
-            else:
-                c = delta/sqrtsum
-            x = [c*i for i in x]
-        self.write_to_pfile('proj done')
-        return x
 
     # 将扰动x投影到特征空间（修改）
     def project2(self,x):
@@ -205,7 +178,7 @@ class SPG2():
         for i in range(1,M):
             fmax = max(fmax,fvalues[i])
         
-        # 计算xnew新的扰动
+        # 计算xnew,新的扰动
         xnew = [x[i]+d[i] for i in range(len(x))]
         self.write_to_pfile("xnew = "+str(xnew))
 
@@ -366,61 +339,6 @@ class SPG2():
             cgnorm = self.fcnorm[self.itern]
             cg = [0 for _ in range(self.dim)]
 
-
-            # with open(restart_file, 'r') as f:
-            #     for line in f.readlines():
-            #         parts = line.split("=")
-            #         head = parts[0].strip()
-            #         body = json.loads(parts[1])
-            #         if head == "iter":
-            #             self.ifcnt = self.itern = self.igcnt = body
-            #         elif head == "x":
-            #             self.x = body
-            #         elif head == "g":
-            #             self.g = body
-            #         elif head == "xf":
-            #             xf = body
-            #         elif head == "gf":
-            #             gf = body
-            #         elif head =="fvalue":
-            #             for i in range(len(body)):
-            #                 self.fvalue[i] = body[i]
-            #         elif head == "fvalues":
-            #             for i in range(len(body)):
-            #                 self.fvalues[i] = body[i]
-            #         elif head == "fcnorm":
-            #             for i in range(len(body)):
-            #                 self.fcnorm[i] = body[i]
-            #         elif head == "fbest":
-            #             self.f = self.fbest = body
-            #         elif head == "xbest":
-            #             self.xbest = body
-            
-            # s = [0 for i in range(self.dim)]
-            # y = [0 for i in range(self.dim)]
-            # cg = [0 for i in range(self.dim)]
-            # sts = sty = 0.0
-            # for i in range(self.dim):
-            #     s[i] = self.x[i]-xf[i]
-            #     y[i]= self.g[i]-gf[i]
-            #     sts = sts + s[i]*s[i]
-            #     sty = sty + s[i]*y[i]
-            #     cg[i] = self.x[i]-self.g[i]
-            
-
-            # self.write_to_pfile('proj cg2')
-            # cg = self.project(cg)
-            
-            # cgnorm=0
-
-            # for i in range(self.dim):
-            #     cgnorm = max(cgnorm,abs(cg[i]-self.x[i]))
-            
-            # if(sty <= 0):
-            #     self.rambda = RMAX
-            # else:
-            #     self.rambda = min(RMAX,max(RMIN,sts/sty))
-
         # 第一次开始
         else:
             #将初始扰动映射到特征空间内
@@ -456,6 +374,7 @@ class SPG2():
             #控制信息更新
             self.itern += 1
 
+            #准备lineSearch所需参数: d,gtd
             gtd = 0
             d = [self.x[i]-self.rambda*self.g[i] for i in range(self.dim)]
             self.write_to_pfile('proj d')
@@ -469,7 +388,7 @@ class SPG2():
 
             #计算更新后的梯度
             gnew = self.evalfg2(choice=3,x=xnew,f=self.f) 
-            self.write_to_pfile('fouth call evalfg')
+            self.write_to_pfile('fourth call evalfg')
 
             s = [0 for i in range(self.dim)]
             y = [0 for i in range(self.dim)]
@@ -479,6 +398,7 @@ class SPG2():
                 y[i]= gnew[i]-self.g[i]
                 sts = sts + s[i]*s[i]
                 sty = sty + s[i]*y[i]
+                # 更新x,g
                 self.x[i] = xnew[i]
                 self.g[i] = gnew[i]
                 cg[i] = self.x[i]-self.g[i]
@@ -529,16 +449,13 @@ class SPG2():
             f.write(str(val))
             f.write('\n')
 
+    # 原空间里x的约束函数（本质是二范数的非负加权，是凸函数）
     def funT(self, t):
         t_value=0
         for i in range(0, 32):
             for j in range(0, 288):
                 t_value += t[i*288+j] * t[i*288+j]*math.cos((60.78534+i*0.94241)/180*math.pi)
         return t_value
-
-
-    def norm(self, ini):
-        return np.linalg.norm(ini, ord=2)
 
     def write_per(self, ini, value):
         level = 1
@@ -597,10 +514,10 @@ class SPG2():
         column = 288
         pre_file = nc.Dataset(run_dir[index] + 'mycase.cam.r.' + start_date + '.nc', mode='a')
         ini = np.dot(np.array(x),np.array(reduction))
-        self.write_to_pfile('start ok')
+        self.write_to_pfile('start case '+str(index))
         ini_T = ini[0 : 32 * 288]
         funt = self.funT(ini_T)
-        if (funt > 100):
+        if (funt > 100):    # 不是必要的，因为已经在降维后的空间做了约束
             ini = 100 / funt * ini
         ini_expT = [[[0 for i in range(0, column)] for j in range(0, row)] for k in range(0, level)]
         for k in range(0, level):
@@ -625,7 +542,7 @@ class SPG2():
         if not os.path.exists(fin_dir[index]):
             return None
         os.rmdir(fin_dir[index])
-        self.write_to_pfile("break ok")
+        self.write_to_pfile('complete case '+str(index))
         if(os.path.exists(run_dir[index] + 'rpointer.rof')):
             os.remove(run_dir[index] + 'rpointer.rof')
         if(os.path.exists(run_dir[index] + 'rpointer.ocn')):
@@ -654,7 +571,7 @@ class SPG2():
                  f.write('mycase.cam.r.' + start_date + '.nc')
         if(not os.path.exists(run_dir[index] + 'mycase.cam.h0.' + output_date + '.nc')):
             self.write_to_pfile("output not found")
-            return error_value
+            raise Exception("output not found")
         fun_file = nc.Dataset(run_dir[index] + 'mycase.cam.h0.' + output_date + '.nc')
         try:
             fun_PSL2 = fun_file.variables['PSL'][duration - 1][:]
@@ -691,7 +608,7 @@ class SPG2():
         column = 288
         pre_file = nc.Dataset(run_dir[index] + 'mycase.cam.r.' + start_date + '.nc', mode='a')
         ini = np.dot(np.array(x),np.array(reduction))
-        self.write_to_pfile('start ok')
+        self.write_to_pfile('start case '+str(index))
         ini_T = ini[0 : 32 * 288]
         funt = self.funT(ini_T)
         if (funt > 100):
@@ -720,7 +637,7 @@ class SPG2():
             if os.path.exists(fin_dir[index]):
                 check = None
                 os.rmdir(fin_dir[index])
-        self.write_to_pfile("break ok")
+        self.write_to_pfile('complete case '+str(index))
         if(os.path.exists(run_dir[index] + 'rpointer.rof')):
             os.remove(run_dir[index] + 'rpointer.rof')
         if(os.path.exists(run_dir[index] + 'rpointer.ocn')):
@@ -749,7 +666,7 @@ class SPG2():
                  f.write('mycase.cam.r.' + start_date + '.nc')
         if(not os.path.exists(run_dir[index] + 'mycase.cam.h0.' + output_date + '.nc')):
             self.write_to_pfile("output not found")
-            return error_value
+            raise Exception("output not found")
         fun_file = nc.Dataset(run_dir[index] + 'mycase.cam.h0.' + output_date + '.nc')
         try:
             fun_PSL2 = fun_file.variables['PSL'][duration - 1][:]
@@ -777,8 +694,8 @@ class SPG2():
         value_fun = (value_a/31914.543)/value_b
         value = value_fun - basic
         self.write_to_pfile("value = "+ str(value))
-        self.write_per(ini, value)
-        self.write_output(value)
+        # self.write_per(ini, value)
+        # self.write_output(value)
         return value
 
 
