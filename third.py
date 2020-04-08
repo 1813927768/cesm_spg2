@@ -32,7 +32,7 @@ restart_file = '/BIGDATA1/iocas_mmu_3/cesm/1.2.2/ice/14/parallel/restart.txt'
 duration = 15
 basic = 1.58523     # 不加扰动模式输出
 init_value = 1e10
-error_value = 10
+error_value = -1
 
 # 所有进程初始PT是一样的
 pre_file = nc.Dataset(run_dir[0] + 'mycase.cam.r.' + start_date + '.nc', mode='a')
@@ -78,8 +78,10 @@ class SPG2():
         # 用来暂时存储delta值
         self.delta = [0 for i in range(self.numprocs)]
         # 随机初始化x位置
-        for i in range(self.dim):
-            self.x[i] = random.uniform(1,10)
+        # for i in range(self.dim):
+        #     self.x[i] = random.uniform(1,10)
+        self.x = [-0.08096916607984803, -0.03495664756799789, 0.026817249939678295, 0.2480815914060795, 0.20292228415516966, 0.9497421106503695, 0.1812740071069885, -0.18103334698596144, 0.39549212162014863, 0.06830074440192622, 0.11184528832483823, 0.7840633617778168, 0.24040779398571, -0.027648839934256098, -0.031099405260915314, -0.17997491679593083, 0.9527065791675203, 1.203333064009176, 0.12103118920500769, 0.1777921181573313, -0.8116039772880719, 0.3637841090694811, -0.1282040589143579, 0.19295815971030747, -0.008570295127894006, 1.8642220510946554, -0.262307932663676, -0.30751670925622837, 0.24469593320938382, 0.42580531019225637, -0.2965915727199712, -0.2618933260701612, 0.3278878511313714, 0.3092884010414014, -0.9454884968649643, -0.12657318406821777, -0.26967005240463104, 0.21924903736855028, 0.26541524651365994, -0.2445868140746803, -0.14477724108675005, -0.19650207369244696, 1.4597495914468839, 0.11995491647853133, 0.40135225732393914, -0.4037097183670837, -0.7202551564956509, 0.05858155819984384, 0.2794045209432028, -0.0025589725828711885]
+
 
     # 重入
     def restart(self):
@@ -132,7 +134,7 @@ class SPG2():
     # 保存iter信息
     def write_to_rfile(self):
         with open(file_name, 'a') as f:
-            f.write('\n'+"### iter = "+ str(self.itern)+'\n')
+            f.write('\n'+"iter = "+ str(self.itern)+'\n')
             f.write("fvalue = "+ str(self.fvalue)+'\n')
             f.write("fvalues = "+ str(self.fvalues)+'\n')
             f.write("x = "+ str(self.x)+'\n')
@@ -146,23 +148,23 @@ class SPG2():
     # 将扰动x投影到特征空间（修改）
     def project2(self,x):
         ini = np.dot(np.array(x),np.array(reduction))
-        self.write_to_pfile('--proj start--')
+        self.write_to_pfile('--proj start (%d)--'%(self.itern))
         self.write_to_pfile(x)
         ini_T = ini[0 : 32 * 288]
         funt = self.funT(ini_T)
-        self.write_to_pfile('f = ' + str(funt))
+        self.write_to_pfile('funt = ' + str(funt))
         # 约束
         if (funt > 100):
             # x = 100 / funt * x
             x = [100 / funt * i for i in x ]     
-            self.write_to_pfile('funt = '+str(funt))  
-        self.write_to_pfile('--proj done--')
+            self.write_to_pfile('need constraint')  
         self.write_to_pfile(x)
+        self.write_to_pfile('--proj done (%d)--'%(self.itern))
         return x
 
     # 通过lineSearch更新扰动位置信息
     def lineSearch(self, d, gtd):
-        self.write_to_pfile("--line search start--")
+        self.write_to_pfile("--line search start (%d)--"%(self.itern))
         self.write_to_pfile("old f = "+str(self.f))
         self.write_to_pfile("gtd = "+str(gtd))
         self.write_to_pfile("d = "+str(d))
@@ -224,9 +226,9 @@ class SPG2():
             self.write_output(fnew)
             self.write_to_pfile("better f found")
 
-        self.write_to_pfile("--line search end--")
         self.write_to_pfile("new f = "+str(self.f))
-
+        self.write_to_pfile("--line search start (%d)--"%(self.itern))
+        
         return xnew
 
     # choice
@@ -274,9 +276,9 @@ class SPG2():
     def createX(self,xold,dim):
         # 防止浅拷贝影响xold
         x = xold.copy()
-        deltall = abs(x[dim]*0.01)
+        deltall = abs(x[dim]*0.1)
         if(deltall == 0.0):
-            deltall = 0.01
+            deltall = 0.1
         x[dim] += deltall
         return x,deltall
 
@@ -284,6 +286,7 @@ class SPG2():
     # 求梯度（伪并行）
     def gradient(self,xold,f):
 
+        self.write_to_pfile("--gradient start (%d)--"%(self.itern))
         gnew = [0 for i in range(self.dim)]
 
         # 当前维度
@@ -297,7 +300,7 @@ class SPG2():
                     dim = self.ctl[busyCase]
                     gnew[dim] = (val-f)/self.delta[busyCase]
                     self.ctl[busyCase] = -1
-                    self.write_to_pfile("gradient done current dim :" + str(dim) + " current caseID :" +str(busyCase))
+                    self.write_to_pfile("   Done! dim :" + str(dim) + " caseID :" +str(busyCase) + " val :" +str(val))
 
 
             # 检查是否有空闲case可供计算
@@ -315,13 +318,13 @@ class SPG2():
                     self.submitTask(x,freeCase)
                     self.ctl[freeCase] = current
                     self.delta[freeCase] = delta
-                    self.write_to_pfile("gradient start current dim :" + str(current) + " current caseID :" +str(freeCase))
+                    self.write_to_pfile("   Start! dim :" + str(current) + " caseID :" +str(freeCase))
                     current += 1
                     
             
             timelibrary.sleep(30)
 
-        self.write_to_pfile("gradient done")
+        self.write_to_pfile("--gradient done (%d)--"%(self.itern))
 
         # 将所有进程重置为空闲状态
         for i in range(self.numprocs):
@@ -500,7 +503,7 @@ class SPG2():
     # 还原
     def x2ini(self,x):
         ini = np.dot(np.array(x),np.array(reduction))
-        self.write_to_pfile('restore finish.')
+        # self.write_to_pfile('restore finish.')
         ini_T = ini[0 : 32 * 288]
         funt = self.funT(ini_T)
         # 约束
@@ -514,7 +517,6 @@ class SPG2():
         column = 288
         pre_file = nc.Dataset(run_dir[index] + 'mycase.cam.r.' + start_date + '.nc', mode='a')
         ini = np.dot(np.array(x),np.array(reduction))
-        self.write_to_pfile('start case '+str(index))
         ini_T = ini[0 : 32 * 288]
         funt = self.funT(ini_T)
         if (funt > 100):    # 不是必要的，因为已经在降维后的空间做了约束
@@ -542,7 +544,6 @@ class SPG2():
         if not os.path.exists(fin_dir[index]):
             return None
         os.rmdir(fin_dir[index])
-        self.write_to_pfile('complete case '+str(index))
         if(os.path.exists(run_dir[index] + 'rpointer.rof')):
             os.remove(run_dir[index] + 'rpointer.rof')
         if(os.path.exists(run_dir[index] + 'rpointer.ocn')):
@@ -570,13 +571,13 @@ class SPG2():
         with open(run_dir[index] + 'rpointer.atm','w') as f:
                  f.write('mycase.cam.r.' + start_date + '.nc')
         if(not os.path.exists(run_dir[index] + 'mycase.cam.h0.' + output_date + '.nc')):
-            self.write_to_pfile("output not found")
+            self.write_to_pfile("CompleteTask: output not found in case$" + str(index))
             raise Exception("output not found")
         fun_file = nc.Dataset(run_dir[index] + 'mycase.cam.h0.' + output_date + '.nc')
         try:
             fun_PSL2 = fun_file.variables['PSL'][duration - 1][:]
         except IndexError:
-            self.write_to_pfile("error_value")
+            self.write_to_pfile("CompleteTask: ErrorValue in case$" + str(index))
             return error_value
         fun_PSL = [[0 for i in range(0, 288)] for j in range(0, 192)]
         for i in range(0, 192):
@@ -598,7 +599,6 @@ class SPG2():
                 value_b += NAO[i][j]*NAO[i][j]
         value_fun = (value_a/31914.543)/value_b
         value = value_fun - basic
-        self.write_to_pfile("value = "+ str(value))
         return value
 
     # 求目标函数值
@@ -608,7 +608,7 @@ class SPG2():
         column = 288
         pre_file = nc.Dataset(run_dir[index] + 'mycase.cam.r.' + start_date + '.nc', mode='a')
         ini = np.dot(np.array(x),np.array(reduction))
-        self.write_to_pfile('start case '+str(index))
+        self.write_to_pfile('--func start (%d)--'%(self.itern))
         ini_T = ini[0 : 32 * 288]
         funt = self.funT(ini_T)
         if (funt > 100):
@@ -637,7 +637,7 @@ class SPG2():
             if os.path.exists(fin_dir[index]):
                 check = None
                 os.rmdir(fin_dir[index])
-        self.write_to_pfile('complete case '+str(index))
+
         if(os.path.exists(run_dir[index] + 'rpointer.rof')):
             os.remove(run_dir[index] + 'rpointer.rof')
         if(os.path.exists(run_dir[index] + 'rpointer.ocn')):
@@ -694,6 +694,7 @@ class SPG2():
         value_fun = (value_a/31914.543)/value_b
         value = value_fun - basic
         self.write_to_pfile("value = "+ str(value))
+        self.write_to_pfile('--func done (%d)--'%(self.itern))
         # self.write_per(ini, value)
         # self.write_output(value)
         return value
