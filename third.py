@@ -35,7 +35,7 @@ init_value = 1e10
 error_value = -1
 
 # 所有进程初始PT是一样的
-pre_file = nc.Dataset(run_dir[0] + 'mycase.cam.r.' + start_date + '.nc', mode='a')
+pre_file = nc.Dataset('/BIGDATA1/iocas_mmu_3/support/input/' + 'mycase.cam.r.' + start_date + '.nc', mode='a')
 # U = pre_file.variables['U'][:]
 PT = pre_file.variables['PT'][:]
 # V = pre_file.variables['V'][:]
@@ -53,21 +53,20 @@ cur_file.close()
 
 #SPG2全局变量设置
 M = 10    #lineSearch考虑的之前的特征方程值个数
-RMAX = 1e30
-RMIN = 1e-30
+RMAX = 1e20
+RMIN = 1e-20
 MAXIT = 50
 MAXIFCNT = 480
 eps = 1e-6 #参照fortran代码
 
 class SPG2():
-    def __init__(self, dim, numprocs):
+    def __init__(self, dim, numprocs, ini = None):
 
         self.dim = dim
         self.numprocs = numprocs
         
         # itern ifcnt igcnt 迭代次数 特征方程计算次数 梯度计算次数
         self.ifcnt = self.itern = self.igcnt = 0
-        self.x =  [0 for i in range(self.dim)]
         self.g = [0 for i in range(self.dim)]
         self.f = init_value
         self.fvalues = [-1.0e+99 for i in range(M)]
@@ -77,10 +76,13 @@ class SPG2():
         self.ctl = [-1 for i in range(self.numprocs)]
         # 用来暂时存储delta值
         self.delta = [0 for i in range(self.numprocs)]
-        # 随机初始化x位置
-        # for i in range(self.dim):
-        #     self.x[i] = random.uniform(1,10)
-        self.x = [-0.08096916607984803, -0.03495664756799789, 0.026817249939678295, 0.2480815914060795, 0.20292228415516966, 0.9497421106503695, 0.1812740071069885, -0.18103334698596144, 0.39549212162014863, 0.06830074440192622, 0.11184528832483823, 0.7840633617778168, 0.24040779398571, -0.027648839934256098, -0.031099405260915314, -0.17997491679593083, 0.9527065791675203, 1.203333064009176, 0.12103118920500769, 0.1777921181573313, -0.8116039772880719, 0.3637841090694811, -0.1282040589143579, 0.19295815971030747, -0.008570295127894006, 1.8642220510946554, -0.262307932663676, -0.30751670925622837, 0.24469593320938382, 0.42580531019225637, -0.2965915727199712, -0.2618933260701612, 0.3278878511313714, 0.3092884010414014, -0.9454884968649643, -0.12657318406821777, -0.26967005240463104, 0.21924903736855028, 0.26541524651365994, -0.2445868140746803, -0.14477724108675005, -0.19650207369244696, 1.4597495914468839, 0.11995491647853133, 0.40135225732393914, -0.4037097183670837, -0.7202551564956509, 0.05858155819984384, 0.2794045209432028, -0.0025589725828711885]
+        if not ini:
+            # 随机初始化x位置
+            self.x =  [0 for i in range(self.dim)]
+            for i in range(self.dim):
+                self.x[i] = random.uniform(1,10)
+        else:
+            self.x = ini
 
 
     # 重入
@@ -166,6 +168,7 @@ class SPG2():
     def lineSearch(self, d, gtd):
         self.write_to_pfile("--line search start (%d)--"%(self.itern))
         self.write_to_pfile("old f = "+str(self.f))
+        self.write_to_pfile("old x = "+str(self.x))
         self.write_to_pfile("gtd = "+str(gtd))
         self.write_to_pfile("d = "+str(d))
         
@@ -174,46 +177,48 @@ class SPG2():
         f = self.f
         fvalues = self.fvalues
 
-        self.write_to_pfile("x = "+str(x))
         # 计算fmax
         fmax = fvalues[0]
         for i in range(1,M):
             fmax = max(fmax,fvalues[i])
-        
-        # 计算xnew,新的扰动
-        xnew = [x[i]+d[i] for i in range(len(x))]
-        self.write_to_pfile("xnew = "+str(xnew))
-
-        # 计算特征方程值
-        fnew = self.evalfg2(x=xnew,f=None,choice=1)
-        self.write_to_pfile('second call evalfg')
+        self.write_to_pfile("fmax = "+str(fmax))
 
         alpha = 1.0
 
-        #主循环
-        while(fnew > fmax + alpha * GAMMA * gtd): #gtd对应δ，alpha对应λ
+        while True:
+            # 计算xnew,新的扰动
+            xnew = [x[i]+alpha*d[i] for i in range(len(x))]
+            fcomp = fmax + alpha * GAMMA * gtd  #gtd对应δ，alpha对应λ
+
+            self.write_to_pfile('alpha = '+ str(alpha))
+            self.write_to_pfile("xnew = "+str(xnew))
+            self.write_to_pfile('fmax + alpha * GAMMA * gtd = '+ str(fcomp))
+
+            # 计算fnew
+            if (np.array(xnew) == np.zeros((50,))).all(): 
+                fnew = -1.03260110912589        #如果xnew是原点，直接给出结果
+            elif fcomp < -3:
+                fnew = 0          # 因为f不可能小于-3所以，当fcomp<-3,直接跳过这一循环
+            else:
+                fnew = self.evalfg2(x=xnew,f=None,choice=1)
+            
+            self.write_to_pfile('second call evalfg')
+            self.write_to_pfile('fnew = '+ str(fnew))
+
+            # 判断是否满足跳出条件
+            if fnew <= fcomp:
+                break
+
+            # 计算新的alpha
             if(alpha <= 0.1):
-                alpha = alpha/2
+                alpha = alpha/3         # speed up the line-search process
             else:
                 atemp = (-gtd*alpha**2)/(2.0*(fnew-f-alpha*gtd))
                 if(atemp < 0.1 or atemp > 0.9*alpha):
                     atemp = alpha/2
                 alpha = atemp
-            
-            xnew = [x[i]+alpha*d[i] for i in range(self.dim)]
 
-            self.write_to_pfile('alpha = '+ str(alpha))
-            self.write_to_pfile('xnew = '+ str(xnew))
-            self.write_to_pfile('fmax + alpha * GAMMA * gtd = '+ str(fmax + alpha * GAMMA * gtd))
-
-            # 计算特征方程值
-            fnew = self.evalfg2(x=xnew,f=None,choice=1)
-
-
-            self.write_to_pfile('fnew = '+ str(fnew))
-            self.write_to_pfile('third call evalfg')
-
-       # 更新扰动位置信息
+        #更新扰动位置信息
         # self.x = xnew
         self.f = fnew
         self.fvalues[(self.itern % M)] = fnew
@@ -227,7 +232,7 @@ class SPG2():
             self.write_to_pfile("better f found")
 
         self.write_to_pfile("new f = "+str(self.f))
-        self.write_to_pfile("--line search start (%d)--"%(self.itern))
+        self.write_to_pfile("--line search done (%d)--"%(self.itern))
         
         return xnew
 
@@ -276,9 +281,9 @@ class SPG2():
     def createX(self,xold,dim):
         # 防止浅拷贝影响xold
         x = xold.copy()
-        deltall = abs(x[dim]*0.1)
+        deltall = abs(x[dim]*0.01)
         if(deltall == 0.0):
-            deltall = 0.1
+            deltall = 0.01
         x[dim] += deltall
         return x,deltall
 
@@ -318,7 +323,7 @@ class SPG2():
                     self.submitTask(x,freeCase)
                     self.ctl[freeCase] = current
                     self.delta[freeCase] = delta
-                    self.write_to_pfile("   Start! dim :" + str(current) + " caseID :" +str(freeCase))
+                    self.write_to_pfile("   Start! dim :" + str(current) + " caseID :" +str(freeCase) + " delta :" +str(delta))
                     current += 1
                     
             
@@ -519,7 +524,7 @@ class SPG2():
         ini = np.dot(np.array(x),np.array(reduction))
         ini_T = ini[0 : 32 * 288]
         funt = self.funT(ini_T)
-        if (funt > 100):    # 不是必要的，因为已经在降维后的空间做了约束
+        if (funt > 100):    
             ini = 100 / funt * ini
         ini_expT = [[[0 for i in range(0, column)] for j in range(0, row)] for k in range(0, level)]
         for k in range(0, level):
@@ -611,7 +616,7 @@ class SPG2():
         self.write_to_pfile('--func start (%d)--'%(self.itern))
         ini_T = ini[0 : 32 * 288]
         funt = self.funT(ini_T)
-        if (funt > 100):
+        if (funt > 100):  # 不是必要的，因为已经在降维后的空间做了约束
             ini = 100 / funt * ini
         ini_expT = [[[0 for i in range(0, column)] for j in range(0, row)] for k in range(0, level)]
         for k in range(0, level):
@@ -706,6 +711,7 @@ reader = csv.reader(open('/BIGDATA1/iocas_mmu_3/support/reductions_T_w.csv', "r"
 for line in reader:
     lineArr = [float(n.strip()) for n in line]
     reduction.append(lineArr)
-my_spg2 = SPG2(dim = 50,numprocs = numprocs)
-my_spg2.spg2()
-# my_spg2.function([0 for _ in range(50)],0)
+
+my_spg2 = SPG2(dim = 50,numprocs = numprocs,ini=None)
+my_spg2.spg2(restartIndex=1)
+

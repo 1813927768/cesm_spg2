@@ -1,3 +1,14 @@
+## Algorithm
+ 
+1. set init parameters: delta, x0
+2. calculate func(x0), gradient(x0)
+3. While the stopping criterion is not satisfied 
+
+    3.1 xnew = lineSearch(x,g)
+    
+    3.2 gnew = gradient(xnew)
+
+
 ## Operation Steps
 
 1. create a case
