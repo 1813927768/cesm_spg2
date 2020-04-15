@@ -5,7 +5,7 @@ import matplotlib.pylab as p
 import random
 from mpl_toolkits.basemap import Basemap, cm
 
-direc ="E:\\result\\"
+direc ="D:\\repos\\cesm_spg2\\result\\"
 
 def plot_nao(fileName,imgType):
     meteo_file = direc + fileName
@@ -140,5 +140,5 @@ def plot_ini(fileName):
 
 
 
-plot_nao(fileName = "NAOI_-1.23380308497.nc",imgType="mean")
-# plot_ini(fileName="ini_-1.33887249243.nc")
+plot_nao(fileName = "NAOI_-1.2563443051793428.nc",imgType="basic")
+# plot_ini(fileName="ini_-1.2563443051793428.nc")
