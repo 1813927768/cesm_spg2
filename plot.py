@@ -72,7 +72,7 @@ def plot_nao(fileName,imgType):
     cbar.ax.tick_params(labelsize=12)
     plt.title(imgType+"_"+fileName)
     plt.show()
-    # plt.savefig(direc+"NAOI_-1.33887249243.png")
+    # plt.savefig(direc+imgType+"_"+fileName+".png")
     fh.close()
 
 
@@ -140,5 +140,5 @@ def plot_ini(fileName):
 
 
 
-plot_nao(fileName = "NAOI_-1.2563443051793428.nc",imgType="basic")
+plot_nao(fileName = "NAOI_-1.3132078932850237.nc",imgType="basic")
 # plot_ini(fileName="ini_-1.2563443051793428.nc")

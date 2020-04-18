@@ -39,3 +39,5 @@ for index in range(nums):
         f.write('mycase.cpl.r.' + start_date + '.nc')
     with open(run_dir[index] + 'rpointer.atm','w') as f:
         f.write('mycase.cam.r.' + start_date + '.nc')
+    
+    os.system("find %s -name '*log*' -delete"%(run_dir[index]))

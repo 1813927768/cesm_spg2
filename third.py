@@ -52,12 +52,14 @@ cur_file.close()
 
 
 #SPG2全局变量设置
-M = 10    #lineSearch考虑的之前的特征方程值个数
-RMAX = 1e20
-RMIN = 1e-20
+M = 5    #lineSearch考虑的之前的特征方程值个数
+RMAX = 1e30
+RMIN = 1e-30
 MAXIT = 50
 MAXIFCNT = 480
 eps = 1e-6 #参照fortran代码
+
+DELTA = 1e-3
 
 class SPG2():
     def __init__(self, dim, numprocs, ini = None):
@@ -113,25 +115,6 @@ class SPG2():
                     self.xbest = body
                 elif head == "rambda":
                     self.rambda = body
-
-    # 重入2
-    def restart2(self):
-        with open(restart_file, 'r') as f:
-            for line in f.readlines():
-                parts = line.split("=")
-                head = parts[0].strip()
-                body = json.loads(parts[1])
-                if head == "iter":
-                    self.ifcnt = self.itern = self.igcnt = body
-                elif head == "x":
-                    self.x = body
-                elif head == "g":
-                    self.g = body
-                elif head == "xf":
-                    self.f = body
-                elif head == "gf":
-                    self.f = body
-
                 
     # 保存iter信息
     def write_to_rfile(self):
@@ -183,13 +166,14 @@ class SPG2():
             fmax = max(fmax,fvalues[i])
         self.write_to_pfile("fmax = "+str(fmax))
 
-        alpha = 1.0
+        iter = alpha = 1.0
 
         while True:
             # 计算xnew,新的扰动
             xnew = [x[i]+alpha*d[i] for i in range(len(x))]
             fcomp = fmax + alpha * GAMMA * gtd  #gtd对应δ，alpha对应λ
 
+            self.write_to_pfile('line search iter = '+ str(iter))
             self.write_to_pfile('alpha = '+ str(alpha))
             self.write_to_pfile("xnew = "+str(xnew))
             self.write_to_pfile('fmax + alpha * GAMMA * gtd = '+ str(fcomp))
@@ -216,7 +200,12 @@ class SPG2():
                 atemp = (-gtd*alpha**2)/(2.0*(fnew-f-alpha*gtd))
                 if(atemp < 0.1 or atemp > 0.9*alpha):
                     atemp = alpha/2
-                alpha = atemp
+                alpha = atemp         
+            # alpha 超出精度范围        
+            if(alpha <= 1e-17):
+                raise Exception("alpha beyond accuracy")
+
+            iter = iter + 1
 
         #更新扰动位置信息
         # self.x = xnew
@@ -281,9 +270,9 @@ class SPG2():
     def createX(self,xold,dim):
         # 防止浅拷贝影响xold
         x = xold.copy()
-        deltall = abs(x[dim]*0.01)
+        deltall = abs(x[dim]*DELTA)
         if(deltall == 0.0):
-            deltall = 0.01
+            deltall = DELTA
         x[dim] += deltall
         return x,deltall
 
@@ -713,5 +702,5 @@ for line in reader:
     reduction.append(lineArr)
 
 my_spg2 = SPG2(dim = 50,numprocs = numprocs,ini=None)
-my_spg2.spg2(restartIndex=1)
+my_spg2.spg2()
 
