@@ -20,8 +20,8 @@ SPLA = ave_file.variables['PSLClm'][0]
 nao_file = nc.Dataset("/BIGDATA1/iocas_mmu_3/support/NAOPSL.nc")
 NAO = nao_file.variables['NAOPSL'][:]
 
-start_date = '0052-11-01-00000'
-output_date = '0052-11-02-00000'
+start_date = '0052-11-15-00000'
+output_date = '0052-11-16-00000'
 base_dir = ['/BIGDATA1/iocas_mmu_3/cesm/1.2.2/ice/14/parallel/' + str(i) + '/mycase' for i in range(numprocs)]
 run_dir = [route + '/run/' for route in base_dir]
 fin_dir = [route + '/finished' for route in base_dir]
@@ -30,12 +30,12 @@ file_name = '/BIGDATA1/iocas_mmu_3/cesm/1.2.2/ice/14/parallel/result_min_1110.tx
 process_file = '/BIGDATA1/iocas_mmu_3/cesm/1.2.2/ice/14/parallel/process.txt'
 restart_file = '/BIGDATA1/iocas_mmu_3/cesm/1.2.2/ice/14/parallel/restart.txt'
 duration = 15
-basic = 1.58523     # 不加扰动模式输出
+basic = -0.17638014536610233     # 不加扰动模式输出-0.8047237110735179
 init_value = 1e10
 error_value = -1
 
 # 所有进程初始PT是一样的
-pre_file = nc.Dataset('/BIGDATA1/iocas_mmu_3/support/input/' + 'mycase.cam.r.' + start_date + '.nc', mode='a')
+pre_file = nc.Dataset('/BIGDATA1/iocas_mmu_3/support/input_15/mycase.cam.r.%s.nc'%(start_date), mode='a')
 # U = pre_file.variables['U'][:]
 PT = pre_file.variables['PT'][:]
 # V = pre_file.variables['V'][:]
@@ -53,8 +53,8 @@ cur_file.close()
 
 #SPG2全局变量设置
 M = 5    #lineSearch考虑的之前的特征方程值个数
-RMAX = 1e30
-RMIN = 1e-30
+RMAX = 1e15
+RMIN = 1e-15
 MAXIT = 50
 MAXIFCNT = 480
 eps = 1e-6 #参照fortran代码
@@ -85,6 +85,7 @@ class SPG2():
                 self.x[i] = random.uniform(1,10)
         else:
             self.x = ini
+        self.DELTA = DELTA
 
 
     # 重入
@@ -146,16 +147,21 @@ class SPG2():
         self.write_to_pfile(x)
         self.write_to_pfile('--proj done (%d)--'%(self.itern))
         return x
+    
+    def project(self,x):
+        self.write_to_pfile(x)
+        return x
 
     # 通过lineSearch更新扰动位置信息
     def lineSearch(self, d, gtd):
         self.write_to_pfile("--line search start (%d)--"%(self.itern))
-        self.write_to_pfile("old f = "+str(self.f))
-        self.write_to_pfile("old x = "+str(self.x))
-        self.write_to_pfile("gtd = "+str(gtd))
-        self.write_to_pfile("d = "+str(d))
+        self.write_to_pfile("   old f = "+str(self.f))
+        self.write_to_pfile("   old x = "+str(self.x))
+        self.write_to_pfile("   gtd = "+str(gtd))
+        self.write_to_pfile("   d = "+str(d))
         
         GAMMA =  1.0e-04
+        dnew = d
         x = self.x
         f = self.f
         fvalues = self.fvalues
@@ -164,33 +170,36 @@ class SPG2():
         fmax = fvalues[0]
         for i in range(1,M):
             fmax = max(fmax,fvalues[i])
-        self.write_to_pfile("fmax = "+str(fmax))
+        self.write_to_pfile("   fmax = "+str(fmax))
 
         iter = alpha = 1.0
 
         while True:
             # 计算xnew,新的扰动
-            xnew = [x[i]+alpha*d[i] for i in range(len(x))]
+            xnew = [x[i]+dnew[i] for i in range(len(x))]
             fcomp = fmax + alpha * GAMMA * gtd  #gtd对应δ，alpha对应λ
 
-            self.write_to_pfile('line search iter = '+ str(iter))
-            self.write_to_pfile('alpha = '+ str(alpha))
-            self.write_to_pfile("xnew = "+str(xnew))
-            self.write_to_pfile('fmax + alpha * GAMMA * gtd = '+ str(fcomp))
+            self.write_to_pfile('   alpha = '+ str(alpha))
+            self.write_to_pfile("   xnew = "+str(xnew))
+            self.write_to_pfile('   fmax + alpha * GAMMA * gtd = '+ str(fcomp))
 
             # 计算fnew
             if (np.array(xnew) == np.zeros((50,))).all(): 
-                fnew = -1.03260110912589        #如果xnew是原点，直接给出结果
+                fnew = 0          #如果xnew是原点，直接给出结果
             elif fcomp < -3:
                 fnew = 0          # 因为f不可能小于-3所以，当fcomp<-3,直接跳过这一循环
             else:
+                iter = iter + 1
                 fnew = self.evalfg2(x=xnew,f=None,choice=1)
             
-            self.write_to_pfile('second call evalfg')
-            self.write_to_pfile('fnew = '+ str(fnew))
+            self.write_to_pfile('   second call evalfg')
+            self.write_to_pfile('   fnew = '+ str(fnew))
 
             # 判断是否满足跳出条件
             if fnew <= fcomp:
+                d = [xnew[i]-x[i] for i in range(len(x))]
+                self.write_to_pfile("d*alpha = "+str(d))
+                self.write_to_pfile('final iter = '+ str(iter))
                 break
 
             # 计算新的alpha
@@ -201,11 +210,13 @@ class SPG2():
                 if(atemp < 0.1 or atemp > 0.9*alpha):
                     atemp = alpha/2
                 alpha = atemp         
-            # alpha 超出精度范围        
-            if(alpha <= 1e-17):
-                raise Exception("alpha beyond accuracy")
-
-            iter = iter + 1
+            
+            # d变化超出精度范围    
+            dnew = [alpha*d[i] for i in range(len(d))]
+            dnorm = np.linalg.norm(np.array(dnew),np.inf)   
+            self.write_to_pfile("   dnorm = "+str(dnorm)) 
+            if(dnorm <= 1e-17):
+                raise Exception("d beyond accuracy")
 
         #更新扰动位置信息
         # self.x = xnew
@@ -270,9 +281,9 @@ class SPG2():
     def createX(self,xold,dim):
         # 防止浅拷贝影响xold
         x = xold.copy()
-        deltall = abs(x[dim]*DELTA)
+        deltall = abs(x[dim]*self.DELTA)
         if(deltall == 0.0):
-            deltall = DELTA
+            deltall = self.DELTA
         x[dim] += deltall
         return x,deltall
 
@@ -318,6 +329,7 @@ class SPG2():
             
             timelibrary.sleep(30)
 
+        self.write_to_pfile(gnew)
         self.write_to_pfile("--gradient done (%d)--"%(self.itern))
 
         # 将所有进程重置为空闲状态
@@ -339,7 +351,7 @@ class SPG2():
         # 第一次开始
         else:
             #将初始扰动映射到特征空间内
-            self.x = self.project2(self.x)
+            self.x = self.project(self.x)
             self.xbest = self.x
             self.write_to_pfile("project done, start evalfg2")
 
@@ -351,7 +363,7 @@ class SPG2():
 
             cg = [self.x[i] - self.g[i] for i in range(self.dim)]
             self.write_to_pfile('proj cg')
-            cg = self.project2(cg)
+            cg = self.project(cg)
 
             cgnorm = 0.0  #cgnorm用于判断是否收敛
             for i in range(self.dim):
@@ -375,7 +387,7 @@ class SPG2():
             gtd = 0
             d = [self.x[i]-self.rambda*self.g[i] for i in range(self.dim)]
             self.write_to_pfile('proj d')
-            d = self.project2(d)
+            d = self.project(d)
             for i in range(self.dim):
                 d[i] = d[i]-self.x[i]
                 gtd += self.g[i]*d[i]
@@ -401,7 +413,7 @@ class SPG2():
                 cg[i] = self.x[i]-self.g[i]
             
             self.write_to_pfile('proj cg2')
-            cg = self.project2(cg)
+            cg = self.project(cg)
 
             cgnorm = 0
             for i in range(self.dim):
@@ -592,7 +604,7 @@ class SPG2():
                 value_a += SPLA_e[i][j]*NAO[i][j]*math.sqrt(math.cos((20.26178+i*0.94241)/180*math.pi))
                 value_b += NAO[i][j]*NAO[i][j]
         value_fun = (value_a/31914.543)/value_b
-        value = value_fun - basic
+        value = basic -value_fun
         return value
 
     # 求目标函数值
@@ -605,7 +617,7 @@ class SPG2():
         self.write_to_pfile('--func start (%d)--'%(self.itern))
         ini_T = ini[0 : 32 * 288]
         funt = self.funT(ini_T)
-        if (funt > 100):  # 不是必要的，因为已经在降维后的空间做了约束
+        if (funt > 100):
             ini = 100 / funt * ini
         ini_expT = [[[0 for i in range(0, column)] for j in range(0, row)] for k in range(0, level)]
         for k in range(0, level):
@@ -686,12 +698,19 @@ class SPG2():
                 value_a += SPLA_e[i][j]*NAO[i][j]*math.sqrt(math.cos((20.26178+i*0.94241)/180*math.pi))
                 value_b += NAO[i][j]*NAO[i][j]
         value_fun = (value_a/31914.543)/value_b
-        value = value_fun - basic
+        value = basic -value_fun
         self.write_to_pfile("value = "+ str(value))
         self.write_to_pfile('--func done (%d)--'%(self.itern))
         # self.write_per(ini, value)
         # self.write_output(value)
         return value
+
+    def testDelta(self):
+        self.f,self.g = self.evalfg2(choice=2,x=self.x,f=self.f)
+        for _ in range(10):
+            self.DELTA = self.DELTA/10
+            self.write_to_pfile("--DELTA = %f --"%(self.DELTA))
+            self.g = self.evalfg2(choice=3,x=self.x,f=self.f)
 
 
 
@@ -701,6 +720,7 @@ for line in reader:
     lineArr = [float(n.strip()) for n in line]
     reduction.append(lineArr)
 
-my_spg2 = SPG2(dim = 50,numprocs = numprocs,ini=None)
-my_spg2.spg2()
-
+neg = [3.694162002055574, 2.3007709012494426, 4.8564804561266595, 4.971143796030497, 6.6417859699045785, -2.7814456395462903, 0.7354560896390208, 7.584109812333855, 4.999347166525484, 9.516322163733989, 0.9918733730045819, 1.899068376285662, 4.263410578352719, 2.67338268145171, 0.5891255224536921, -0.5273946133362423, 1.3420659347804285, 8.605162827867703, -1.9399323246716704, 7.635651247648104, 3.305485212205186, 0.4343931366877543, 4.263861838797711, 3.8129153563787903, 6.05191528727672, 0.7570705608916601, 0.5339783017709662, 3.633647504154749, 3.2836359036036127, 3.8366305560815626, -1.5335418930844278, 0.16657571615455743, 3.592546671730668, -1.8181997971891057, 5.942634891232685, 1.6339432339362756, 7.410652098422764, 3.907538962682855, -1.6389248398426584, 2.8762962228812405, 3.34335792203602, 5.109376191755419, 2.398497731454465, -0.0691665703460284, 4.15884432736265, -2.4337141032173233, 0.9693897374041158, 1.996891324207389, 6.971879735451466, 5.3292478661414435]
+pos = [-1.7957734205160336, -2.4832257799548296, -6.518950693905748, -2.8716890588652095, -5.208429912253714, -1.8939349224180435, -2.211837703126254, -0.9219129507694348, -0.4203642737983837, -6.917585049477449, 1.0114212234853013, 4.309530142287708, -1.4154000343104505, 5.8887225960226735, -1.728333231354218, -0.3953315654001579, -1.311986426192005, -3.52117319655655, -2.768678539554144, 2.831811575392007, -0.9685200193952151, 2.91744554786807, -1.5589255333178458, -5.225812527578701, 0.7003509197313242, -2.5443162996837554, -5.090484528995176, -1.0200368279530765, -3.766734768839968, 3.8542476194380786, 1.8663605582645508, 3.201635529775394, 1.0106769168551193, 1.809287177408816, -4.481481330099257, -1.5731893849669127, -0.9298522171938908, -5.822129061587142, -2.7964681304752212, -2.0521914210352996, 3.0540597054958, -6.697304296331807, 3.4313218962524914, 2.473482385396798, 1.3423745178058568, 3.305570016478261, -5.14159557513977, -5.43097336446301, -2.709339432188396, -3.206242847697322]
+my_spg2 = SPG2(dim = 50,numprocs = numprocs,ini=pos)
+my_spg2.testDelta()

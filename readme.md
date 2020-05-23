@@ -13,14 +13,14 @@
 
 1. create a case
 ```
-create_newcase -mach Tianhe2 -case /BIGDATA1/iocas_mmu_3/cesm/1.2.2/ice/14/parallel/1/mycase -compset F -res f09_g16
+create_newcase -mach Tianhe2 -case /BIGDATA1/iocas_mmu_3/cesm/1.2.2/ice/14/parallel/3/mycase -compset F -res f09_g16
 ```
 
 2. setup the case
 
     2.1 setup xml files
     ```
-    ./setup_xml.sh ./1/mycase
+    ./setup_xml.sh ./pre/mycase
     ```
 
     2.2 edit user_nl_cam
@@ -28,25 +28,21 @@ create_newcase -mach Tianhe2 -case /BIGDATA1/iocas_mmu_3/cesm/1.2.2/ice/14/paral
     nhtfrq = -24
     ```
 
-    2.3 run cesm_setup
-    ```
-    ./cesm_setup -clean
-    ./cesm_setup
-    ```
-
-    2.4 edit mycase.run
+    2.3 edit mycase.run
+    
     ```
     ## yhrun -N ${SLURM_NNODES} -n ${SLURM_NTASKS}  ${EXEROOT}/cesm.exe 
-    cd $CASEROOT
-    mkdir finished
+    # cd $CASEROOT
+    # mkdir finished
     ## echo "`date` -- CSM EXECUTION HAS FINISHED" 
+    sed -i '/cesm\.exe/a\mkdir \$CASEROOT\/finished' mycase.run
     ```
 
 3. build the case 
 
 ```
 ./mycase.clean_build
-./mycase.bulid
+./mycase.build
 ```
 
 4. run 

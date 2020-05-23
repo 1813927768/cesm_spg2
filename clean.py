@@ -8,7 +8,7 @@ base_dir = ['/BIGDATA1/iocas_mmu_3/cesm/1.2.2/ice/14/parallel/' + str(i) + '/myc
 run_dir = [route + '/run/' for route in base_dir]
 fin_dir = [route + '/finished' for route in base_dir]
 
-start_date = '0052-11-01-00000'
+start_date = '0052-11-15-00000'
 
 for index in range(nums):
     if os.path.exists(fin_dir[index]):

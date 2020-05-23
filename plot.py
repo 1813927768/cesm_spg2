@@ -28,7 +28,7 @@ def plot_nao(fileName,imgType):
     tlml = output - basic_data
     lons = np.arange(-180., 181.25, 1.25)
 
-    fun_PSL = [[0 for i in range(0, 289)] for j in range(0, 192)]
+    fun_PSL = [[0.0 for i in range(0, 289)] for j in range(0, 192)]
     fun_PSL = np.array(fun_PSL)
     for i in range(0, 192):
         for j in range(0, 289):
@@ -63,14 +63,15 @@ def plot_nao(fileName,imgType):
     #cm = plt.cm.get_cmap('coolwarm')
     #cs = m.pcolor(xi, yi, np.squeeze(tlml_0), cmap=cm, vmin=np.min(tlml_0), vmax=np.max(tlml_0))
 
-    a = np.arange(-3500, 0, 500)
+    a = np.arange(-4000, 0, 500)
     b = np.arange(0, 4000, 500)
+
     clevs = np.append(a, b)
     cs = m.contourf(xi, yi, np.squeeze(tlml_0), clevs, cmap=p.cm.coolwarm)
     cbar = m.colorbar(cs, location='bottom', size="8%", pad="10%")
     # cbar.set_label(tlml_units, fontsize=12)
     cbar.ax.tick_params(labelsize=12)
-    plt.title(imgType+"_"+fileName)
+    plt.title("positive_unconstrained")
     plt.show()
     # plt.savefig(direc+imgType+"_"+fileName+".png")
     fh.close()
@@ -139,6 +140,7 @@ def plot_ini(fileName):
     fh.close()
 
 
-
-plot_nao(fileName = "NAOI_-1.3132078932850237.nc",imgType="basic")
-# plot_ini(fileName="ini_-1.2563443051793428.nc")
+if __name__ == '__main__':
+    # plot_nao(fileName = "NAOI_0.9377883543892195.nc",imgType="mean")
+    plot_nao(fileName = "NAOI_-0.21755857522757985.nc",imgType="basic")
+    # plot_ini(fileName="ini_-1.2563443051793428.nc")
