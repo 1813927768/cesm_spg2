@@ -11,6 +11,8 @@
 
 ## Operation Steps
 
+> Updates: Now you can run ./setup_xml.sh ./1/mycase to complete the whole process before step 4 running
+
 1. create a case
 ```
 create_newcase -mach Tianhe2 -case /BIGDATA1/iocas_mmu_3/cesm/1.2.2/ice/14/parallel/3/mycase -compset F -res f09_g16
