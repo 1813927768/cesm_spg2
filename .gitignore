@@ -1,4 +1,8 @@
 .vscode/*
+# ignore all files in log/ except for .gitkeep
 log/*
+!.gitkeep
+# ignore all files in result/ except for .gitkeep
 result/*
+!.gitkeep
 __pycache__/*

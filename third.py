@@ -1,5 +1,6 @@
 # coding=utf-8
 # /BIGDATA1/iocas_mmu_3/cesm/1.2.2/ice/14/parallel/third.py
+# main process for this project
 
 import netCDF4 as nc
 import numpy as np

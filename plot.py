@@ -1,3 +1,5 @@
+# make plots to valiadate final results for comparison
+
 from netCDF4 import Dataset
 import numpy as np
 import matplotlib.pyplot as plt

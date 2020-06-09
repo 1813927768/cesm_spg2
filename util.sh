@@ -1,4 +1,4 @@
-# useful gists
+# useful bash gists
 
 # kill all running tasks
 yhcancel `yhq | grep -Eo [0-9]{7}`
